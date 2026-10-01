@@ -1,1 +1,9 @@
-PLACEHOLDER
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Films — Suivi production & diffusion</title><link rel="stylesheet" href="style.css"></head><body>
+<div id="authGate" class="auth-gate"><form id="loginForm" class="auth-card"><div class="auth-mark">MP</div><h2>Espace de travail</h2><p>Connecte-toi pour accéder aux données partagées et aux informations privées du film.</p><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Mot de passe<input name="password" type="password" autocomplete="current-password" required></label><button class="primary" type="submit">Se connecter</button><div id="authError" class="auth-error"></div></form></div>
+<div class="cloud-pill"><span id="cloudStatus">Hors ligne</span><span id="cloudUser"></span><button id="logoutBtn" type="button">Déconnexion</button></div>
+<div id="appMount"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script src="cloud.js"></script>
+</body></html>
