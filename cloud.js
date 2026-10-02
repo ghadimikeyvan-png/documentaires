@@ -141,6 +141,24 @@
       sessionStorage.removeItem('mpi_cloud_reloaded');
       await bootstrap();
     };
+    const logout=q('#logoutBtn');
+    if(logout && !q('#changePasswordBtn')){
+      const change=document.createElement('button');
+      change.id='changePasswordBtn';
+      change.type='button';
+      change.textContent='Changer mon mot de passe';
+      change.onclick=async()=>{
+        const email=user?.email || q('#loginForm input[name="email"]')?.value?.trim();
+        if(!email){ alert('Impossible de retrouver ton adresse email.'); return; }
+        change.disabled=true;
+        change.textContent='Envoi…';
+        const rr=await client.auth.resetPasswordForEmail(email,{redirectTo:SITE_URL});
+        change.disabled=false;
+        change.textContent='Changer mon mot de passe';
+        alert(rr.error ? 'Erreur : '+rr.error.message : 'Email envoyé. Regarde aussi dans les spams.');
+      };
+      logout.parentElement?.insertBefore(change,logout);
+    }
     q('#logoutBtn').onclick=async()=>{ await client.auth.signOut(); sessionStorage.clear(); location.reload(); };
   }
   addEventListener('DOMContentLoaded',init);
