@@ -1,6 +1,7 @@
 (() => {
   const SUPABASE_URL = 'https://xokiycckptplwmfshotg.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_lWJw8jIYgg6pOXyWh4QS2w_uYyJvNT5';
+  const SITE_URL = 'https://ghadimikeyvan-png.github.io/documentaires/';
   const IRAN_SLUG = 'mon-pere-iran-et-moi';
   let client, user, iranProject, missionProject, timers = {};
 
@@ -32,8 +33,8 @@
   async function bootstrap(){
     status('Connexion…');
     await ensureProjects();
-    const a=await hydrateRecord(iranProject,'iran-main',localIran(),writeIran);
-    const b=await hydrateRecord(missionProject,'mission-'+user.id,localMission(),writeMission);
+    await hydrateRecord(iranProject,'iran-main',localIran(),writeIran);
+    await hydrateRecord(missionProject,'mission-'+user.id,localMission(),writeMission);
     sessionStorage.setItem('mpi_cloud_ready','1');
     sessionStorage.setItem('mpi_cloud_user',user.email||'');
     if(!sessionStorage.getItem('mpi_cloud_reloaded')){ sessionStorage.setItem('mpi_cloud_reloaded','1'); location.reload(); return; }
@@ -48,13 +49,98 @@
 
   window.cloudSync={scheduleIran:()=>debounce('iran',upsertIran),scheduleMission:()=>debounce('mission',upsertMission),flushIran:upsertIran,flushMission:upsertMission};
 
+  function installPasswordUI(){
+    const loginForm=q('#loginForm');
+    if(!loginForm || q('#forgotPasswordBtn')) return;
+
+    const forgot=document.createElement('button');
+    forgot.type='button';
+    forgot.id='forgotPasswordBtn';
+    forgot.className='secondary';
+    forgot.textContent='Mot de passe oublié ?';
+    forgot.style.cssText='width:100%;margin-top:10px';
+    const err=q('#authError');
+    loginForm.insertBefore(forgot,err);
+
+    const reset=document.createElement('form');
+    reset.id='resetPasswordForm';
+    reset.className='auth-card hidden';
+    reset.innerHTML=`
+      <div class="auth-mark">MP</div>
+      <h2>Nouveau mot de passe</h2>
+      <p>Choisis ton nouveau mot de passe.</p>
+      <label>Nouveau mot de passe<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label>Confirmer<input name="confirm" type="password" autocomplete="new-password" minlength="8" required></label>
+      <button class="primary" type="submit">Enregistrer le nouveau mot de passe</button>
+      <div id="resetPasswordError" class="auth-error"></div>
+    `;
+    q('#authGate')?.appendChild(reset);
+
+    forgot.onclick=async()=>{
+      const email=loginForm.querySelector('input[name="email"]')?.value?.trim();
+      const authError=q('#authError');
+      if(!email){ authError.textContent='Entre d’abord ton adresse email.'; return; }
+      forgot.disabled=true;
+      authError.textContent='Envoi du mail…';
+      const r=await client.auth.resetPasswordForEmail(email,{redirectTo:SITE_URL});
+      forgot.disabled=false;
+      authError.textContent=r.error
+        ? 'Impossible d’envoyer le mail : '+r.error.message
+        : 'Si ce compte existe, un email de réinitialisation vient d’être envoyé. Regarde aussi dans les spams.';
+    };
+
+    reset.onsubmit=async e=>{
+      e.preventDefault();
+      const fd=new FormData(reset);
+      const p=String(fd.get('password')||'');
+      const c=String(fd.get('confirm')||'');
+      const msg=q('#resetPasswordError');
+      if(p.length<8){ msg.textContent='Choisis au moins 8 caractères.'; return; }
+      if(p!==c){ msg.textContent='Les deux mots de passe ne correspondent pas.'; return; }
+      msg.textContent='Enregistrement…';
+      const r=await client.auth.updateUser({password:p});
+      if(r.error){ msg.textContent='Impossible de modifier le mot de passe : '+r.error.message; return; }
+      msg.textContent='Mot de passe modifié. Tu peux maintenant te reconnecter.';
+      setTimeout(async()=>{ await client.auth.signOut(); location.href=SITE_URL; },900);
+    };
+  }
+
+  function showPasswordRecovery(){
+    installPasswordUI();
+    q('#authGate')?.classList.remove('hidden');
+    q('#loginForm')?.classList.add('hidden');
+    q('#resetPasswordForm')?.classList.remove('hidden');
+    status('Réinitialisation du mot de passe');
+  }
+
   async function init(){
     if(!window.supabase){ q('#authError').textContent='Impossible de charger Supabase. Vérifie ta connexion Internet.'; return; }
     client=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+    installPasswordUI();
+
+    client.auth.onAuthStateChange((event,session)=>{
+      if(event==='PASSWORD_RECOVERY'){
+        user=session?.user||null;
+        setTimeout(showPasswordRecovery,0);
+      }
+    });
+
     const {data}=await client.auth.getSession(); user=data.session?.user||null;
-    if(user){ try{ await bootstrap(); }catch(e){ console.error(e); q('#authGate')?.classList.remove('hidden'); q('#authError').textContent=e.message||String(e); } }
+    const recoveryInUrl = location.hash.includes('type=recovery') || new URLSearchParams(location.search).get('type')==='recovery';
+    if(recoveryInUrl){ showPasswordRecovery(); }
+    else if(user){ try{ await bootstrap(); }catch(e){ console.error(e); q('#authGate')?.classList.remove('hidden'); q('#authError').textContent=e.message||String(e); } }
     else { q('#authGate')?.classList.remove('hidden'); }
-    q('#loginForm').onsubmit=async e=>{ e.preventDefault(); q('#authError').textContent=''; const fd=new FormData(e.target); const r=await client.auth.signInWithPassword({email:fd.get('email'),password:fd.get('password')}); if(r.error){q('#authError').textContent='Connexion impossible : '+r.error.message;return;} user=r.data.user; sessionStorage.removeItem('mpi_cloud_reloaded'); await bootstrap(); };
+
+    q('#loginForm').onsubmit=async e=>{
+      e.preventDefault();
+      q('#authError').textContent='';
+      const fd=new FormData(e.target);
+      const r=await client.auth.signInWithPassword({email:fd.get('email'),password:fd.get('password')});
+      if(r.error){q('#authError').textContent='Connexion impossible : '+r.error.message;return;}
+      user=r.data.user;
+      sessionStorage.removeItem('mpi_cloud_reloaded');
+      await bootstrap();
+    };
     q('#logoutBtn').onclick=async()=>{ await client.auth.signOut(); sessionStorage.clear(); location.reload(); };
   }
   addEventListener('DOMContentLoaded',init);
